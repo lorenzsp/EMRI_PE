@@ -39,7 +39,8 @@ Phi_r0 = 0.0;    # Radial phase
 
 # Waveform params
 delta_t = 10.0;  # Sampling interval [seconds]
-T = 2.0     # Evolution time [years]
+TOBs = 3150000 # observation time in seconds
+T = TOBs/31558149.763545603  # Evolution time [years]
 
 mich = False #mich = True implies output in hI, hII long wavelength approximation
 
