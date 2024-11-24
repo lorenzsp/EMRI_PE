@@ -1,24 +1,10 @@
-#!/bin/sh
+conda activate sbi_emri 
 
-#SBATCH --job-name=test_EMRI
-#SBATCH --output=output_logs/output_%j.out
-#SBATCH --error=error_logs/error_%j.err
-#SBATCH --account=lisa
-#SBATCH --partition=gpu_a100
-#SBATCH --ntasks=1
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:1
-#SBATCH --qos=gpu_all
-#SBATCH --mem=100G
-#SBATCH --cpus-per-gpu=20
-#SBATCH --time=06:00:00
+# set CUDA device
+export CUDA_VISIBLE_DEVICES=0
 
-module load conda
-module unload conda
-module load conda
-conda activate EMRI_PE_env 
-module load gcc/10.2.0
-module load cuda/11.7.0
-python /data/lsperi/sbi_emri/EMRI_PE/mcmc_code/mcmc_run.py
+# Create a dynamic output filename
+output_filename="output.txt"
 
-
+# Execute the Python command and redirect output to the dynamic filename
+nohup python ../mcmc_code/mcmc_run.py > $output_filename &

@@ -108,7 +108,10 @@ def llike(params):
     waveform_prop = EMRI_TDI(M_val, mu_val, a_val, p0_val, e0_val, 
                                   Y0_val, D_val, qS_val, phiS_val, qK_val, phiK_val,
                                     Phi_phi0=Phi_phi0_val, Phi_theta0=Phi_theta0_val, Phi_r0=Phi_r0_val, 
-                                    mich=mich, dt=delta_t, T=T)  # EMRI waveform across A, E and T.
+                                    mich=mich,
+                                    eps=1e-5,
+                                    dt=delta_t, 
+                                    T=T)  # EMRI waveform across A, E and T.
 
 
     # Taper and then zero pad. 
@@ -168,15 +171,15 @@ gen_wave = GenerateEMRIWaveform("FastSchwarzschildEccentricFlux",sum_kwargs=sum_
 
 ####=======================True Responsed waveform==========================
 # Build the response wrapper
-EMRI_TDI = ResponseWrapper(gen_wave,T,delta_t,
-                          index_lambda,index_beta,t0=t0,
+EMRI_TDI = ResponseWrapper(gen_wave, T, delta_t,
+                          index_lambda, index_beta, t0=t0,
                           flip_hx = True, use_gpu = use_gpu, is_ecliptic_latitude=False,
                           remove_garbage = "zero", **tdi_kwargs_esa)
 
 
 # Set true params
-params = [M,mu,a,p0,e0,Y0,dist,qS, phiS, qK, phiK] 
-waveform = EMRI_TDI(*params, Phi_phi0 = Phi_phi0, Phi_theta0 = Phi_theta0, Phi_r0 = Phi_r0)  # Generate waveform
+params = [M, mu, a, p0, e0, Y0, dist, qS, phiS, qK, phiK] 
+waveform = EMRI_TDI(*params, Phi_phi0 = Phi_phi0, Phi_theta0 = Phi_theta0, Phi_r0 = Phi_r0, eps=1e-5,)  # Generate waveform
 
 # Window to reduce leakage. 
 window = cp.asarray(tukey(len(waveform[0]),0.05))
