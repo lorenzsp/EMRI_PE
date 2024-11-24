@@ -19,6 +19,6 @@ module load conda
 conda activate EMRI_PE_env 
 module load gcc/10.2.0
 module load cuda/11.7.0
-
+python /data/lsperi/sbi_emri/EMRI_PE/mcmc_code/mcmc_run.py
 
 

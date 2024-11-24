@@ -7,13 +7,17 @@ from EMRI_settings import (M, mu, a, p0, e0, Y0,
                       dist, Phi_phi0, Phi_theta0, Phi_r0, qS, phiS, qK, phiK, 
                       mich, T, inspiral_kwargs, sum_kwargs, xp, use_gpu, delta_t) 
 
-from scipy.signal import tukey       # I'm always pro windowing.  
+from scipy.signal.windows import tukey       # I'm always pro windowing.  
 
-from lisatools.sensitivity import noisepsd_AE,noisepsd_T # Power spectral densities
+# from lisatools.sensitivity import noisepsd_AE,noisepsd_T # Power spectral densities
+from pycbc.psd.analytical_space import analytical_psd_lisa_tdi_AE_confusion
+from pycbc.noise.gaussian import noise_from_psd
+
+from lisatools.sensitivity import * # Power spectral densities
 from fastlisaresponse import ResponseWrapper             # Response
 
 # Import relevant EMRI packages
-from few.waveform import Pn5AAKWaveform
+from few.waveform import GenerateEMRIWaveform
 from few.trajectory.inspiral import EMRIInspiral
 from few.utils.utility import get_separatrix, Y_to_xI, get_p_at_t
 
@@ -28,7 +32,7 @@ YRSID_SI = 31558149.763545603
 np.random.seed(1234)
 
 # Set up response parameters
-t0 = 20000.0   # How many samples to remove from start and end of simulations.
+t0 = 10000.0  # time at which signal starts (chops off data at start of waveform where information is not correct)
 order = 25
 
 #TODO: Need to figure out how to make this NOT hard coded.
@@ -45,7 +49,7 @@ tdi_kwargs_esa = dict(
     orbit_kwargs=orbit_kwargs_esa, order=order, tdi=tdi_gen, tdi_chan="AET",
     )
 
-TDI_channels = ['TDIA','TDIE','TDIT']
+TDI_channels = ['TDIA','TDIE']#,'TDIT']
 N_channels = len(TDI_channels)
 
 def zero_pad(data):
@@ -81,24 +85,24 @@ def llike(params):
     # Intrinsic Parameters
     M_val = float(params[0])
     mu_val =  float(params[1])
-    a_val =  float(params[2])            
-    p0_val = float(params[3])
-    e0_val = float(params[4])
-    Y0_val = float(params[5])
+    a_val = 0.0  # Fixed value
+    p0_val = float(params[2])
+    e0_val = float(params[3])
+    Y0_val = 1.0  # Fixed value
     
     # Luminosity distance 
-    D_val = float(params[6])
+    D_val = float(params[4])
 
     # Angular Parameters
-    qS_val = float(params[7])
-    phiS_val = float(params[8])
-    qK_val = float(params[9])
-    phiK_val = float(params[10])
+    qS_val = float(params[5])
+    phiS_val = float(params[6])
+    qK_val = float(params[7])
+    phiK_val = float(params[8])
 
     # Angular parameters
-    Phi_phi0_val = float(params[11])
-    Phi_theta0_val = float(params[12])
-    Phi_r0_val = float(params[13])
+    Phi_phi0_val = float(params[9])
+    Phi_theta0_val = Phi_theta0  # Fixed value
+    Phi_r0_val = float(params[10])
 
     # Propose new waveform model
     waveform_prop = EMRI_TDI(M_val, mu_val, a_val, p0_val, e0_val, 
@@ -123,7 +127,7 @@ def llike(params):
 
 ## ===================== CHECK TRAJECTORY ====================
 # 
-traj = EMRIInspiral(func="pn5")  # Set up trajectory module, pn5 AAK
+traj = EMRIInspiral(func="SchwarzEccFlux")  # Set up trajectory module, pn5 AAK
 
 # Compute trajectory 
 t_traj, p_traj, e_traj, Y_traj, Phi_phi_traj, Phi_r_traj, Phi_theta_traj = traj(M, mu, a, p0, e0, Y0,
@@ -145,25 +149,26 @@ p_new = get_p_at_t(
     index_of_x=5,
     xtol=2e-12,
     rtol=8.881784197001252e-16,
-    bounds=None,
+    bounds=[get_separatrix(0.0, e_traj[0], x_I_traj[0])+0.2, 20.0],
 )
-
+# breakpoint()
 
 print("We require initial semi-latus rectum of ",p_new, "for inspiral lasting", T, "years")
 print("Your chosen semi-latus rectum is", p0)
 if p0 < p_new:
     print("Careful, the smaller body is plunging. Expect instabilities.")
 else:
-    print("Body is not plunging.") 
+    print("Body is not plunging.")
 print("Final point in semilatus rectum achieved is", p_traj[-1])
 print("Separatrix : ", get_separatrix(a, e_traj[-1], x_I_traj[-1]))
 
 # Construct the AAK model with 5PN trajectories
-AAK_waveform_model = Pn5AAKWaveform(inspiral_kwargs=inspiral_kwargs, sum_kwargs=sum_kwargs, use_gpu=use_gpu)
+# AAK_waveform_model = Pn5AAKWaveform(inspiral_kwargs=inspiral_kwargs, sum_kwargs=sum_kwargs, use_gpu=use_gpu)
+gen_wave = GenerateEMRIWaveform("FastSchwarzschildEccentricFlux",sum_kwargs=sum_kwargs,use_gpu=use_gpu,)
 
 ####=======================True Responsed waveform==========================
 # Build the response wrapper
-EMRI_TDI = ResponseWrapper(AAK_waveform_model,T,delta_t,
+EMRI_TDI = ResponseWrapper(gen_wave,T,delta_t,
                           index_lambda,index_beta,t0=t0,
                           flip_hx = True, use_gpu = use_gpu, is_ecliptic_latitude=False,
                           remove_garbage = "zero", **tdi_kwargs_esa)
@@ -171,7 +176,7 @@ EMRI_TDI = ResponseWrapper(AAK_waveform_model,T,delta_t,
 
 # Set true params
 params = [M,mu,a,p0,e0,Y0,dist,qS, phiS, qK, phiK] 
-waveform = EMRI_TDI(*params, Phi_phi0 = Phi_phi0, Phi_theta0 = Phi_theta0, Phi_r0 = Phi_r0)  # Generate h_plus and h_cross
+waveform = EMRI_TDI(*params, Phi_phi0 = Phi_phi0, Phi_theta0 = Phi_theta0, Phi_r0 = Phi_r0)  # Generate waveform
 
 # Window to reduce leakage. 
 window = cp.asarray(tukey(len(waveform[0]),0.05))
@@ -187,7 +192,34 @@ freq[0] = freq[1]   # To "retain" the zeroth frequency
 # Define PSDs
 freq_np = xp.asnumpy(freq)
 
-PSD_AET = [noisepsd_AE(freq_np, includewd=T),noisepsd_AE(freq_np,includewd=T),noisepsd_T(freq_np,includewd=T)]
+# from LISA tools
+noisepsd_A = A1TDISens()
+noisepsd_E = E1TDISens()
+noisepsd_T = T1TDISens()
+PSD_AET = [noisepsd_A.get_Sn(freq_np),noisepsd_E.get_Sn(freq_np),noisepsd_T.get_Sn(freq_np)]
+
+# from PyCBC
+psd = analytical_psd_lisa_tdi_AE_confusion(N_t, freq_np[2]-freq_np[1], 1e-4, tdi=1.5) # check lower flow
+noise_samples = noise_from_psd(N_t, delta_t, psd)
+
+psd_f = xp.fft.fftfreq(N_t,delta_t).get() # extract PSD from psd
+mask = (psd_f>=0.0)
+# psd_f[mask][:-1]
+print(freq_np[1:-1] - psd_f[mask][1:])
+psd_f = freq_np.copy()
+psd_data = PSD_AET[0].copy()
+psd_data[:-1] = psd.data[mask]
+
+# plot PSDs
+plt.figure()
+plt.loglog(freq_np, np.abs(np.fft.rfft(noise_samples)*delta_t)**2 / (N_t * delta_t / 4.), '--', label='pycbc generated noise')
+plt.loglog(psd_f, psd_data, label='pycbc TDI A with confusion')
+plt.loglog(freq_np, PSD_AET[0], '--', label='TDI A')
+plt.legend()
+plt.savefig("PSD.png")
+# breakpoint()
+
+# define PSDs from PyCBC
 PSD_AET = [cp.asarray(item) for item in PSD_AET] # Convert to cupy array
 
 # Compute optimal matched filtering SNR
@@ -206,18 +238,24 @@ if SNR < 15:
 
 # Compute Variance and build noise realisation
 variance_noise_AET = [N_t * PSD_AET[k] / (4*delta_t) for k in range(N_channels)]
-noise_f_AET_real = [xp.random.normal(0,np.sqrt(variance_noise_AET[k])) for k in range(N_channels)]
-noise_f_AET_imag = [xp.random.normal(0,np.sqrt(variance_noise_AET[k])) for k in range(N_channels)]
 
 # Compute noise in frequency domain
-noise_f_AET = xp.asarray([noise_f_AET_real[k] + 1j * noise_f_AET_imag[k] for k in range(N_channels)])
+noise_f_AET = xp.asarray([xp.random.normal(0,np.sqrt(variance_noise_AET[k])) + 1j * xp.random.normal(0,np.sqrt(variance_noise_AET[k])) for k in range(N_channels)])
 
 # Dealing with positive transform, so first and last values are real. 
 # todo: fix
 #noise_f_AET[0] = np.sqrt(2)*np.real(noise_f_AET) 
 #noise_f_AET[-1] = np.sqrt(2)*np.real(noise_f_AET)
 
-data_f_AET = EMRI_AET_fft + 0*noise_f_AET   # define the data
+data_f_AET = EMRI_AET_fft + 1.0*noise_f_AET   # define the data
+
+# matched SNR
+noise_SNR2_AET = xp.asarray([inner_prod(noise_f_AET[i],noise_f_AET[i],N_t,delta_t,PSD_AET[i]) for i in range(N_channels)])/N_t
+SNR2_AET = xp.asarray([inner_prod(data_f_AET[i],EMRI_AET_fft[i],N_t,delta_t,PSD_AET[i]) for i in range(N_channels)])
+
+for i in range(N_channels):
+    print("matched SNR in channel {0} is {1}".format(TDI_channels[i],SNR2_AET[i]**(1/2)))
+    print("noise SNR^2 / N_t in channel {0} is {1}".format(TDI_channels[i],noise_SNR2_AET[i]))
 
 ##===========================MCMC Settings============================
 
@@ -235,14 +273,11 @@ d = 1 # A parameter that can be used to dictate how close we want to start to th
 
 # We start the sampler exceptionally close to the true parameters and let it run. This is reasonable 
 # if and only if we are quantifying how well we can measure parameters. We are not performing a search. 
-
 # Intrinsic Parameters
 start_M = M*(1. + d * 1e-7 * np.random.randn(nwalkers,1))   
 start_mu = mu*(1. + d * 1e-7 * np.random.randn(nwalkers,1))
-start_a = a*(1. + d * 1e-7 * np.random.randn(nwalkers,1))
 start_p0 = p0*(1. + d * 1e-8 * np.random.randn(nwalkers, 1))
 start_e0 = e0*(1. + d * 1e-7 * np.random.randn(nwalkers, 1))
-start_Y0 = Y0*(1. + d * 1e-7 * np.random.randn(nwalkers, 1))
 
 # Luminosity distance
 start_D = dist*(1 + d * 1e-6 * np.random.randn(nwalkers,1))
@@ -255,12 +290,11 @@ start_phiK = phiK*(1. + d * 1e-6 * np.random.randn(nwalkers,1))
 
 # Initial phases 
 start_Phi_Phi0 = Phi_phi0*(1. + d * 1e-6 * np.random.randn(nwalkers, 1))
-start_Phi_theta0 = Phi_theta0*(1. + d * 1e-6 * np.random.randn(nwalkers, 1))
 start_Phi_r0 = Phi_r0*(1. + d * 1e-6 * np.random.randn(nwalkers, 1))
 
 # Set up starting coordinates
-start = np.hstack((start_M,start_mu, start_a, start_p0, start_e0, start_Y0, start_D, 
-start_qS, start_phiS, start_qK, start_phiK,start_Phi_Phi0, start_Phi_theta0, start_Phi_r0))
+start = np.hstack((start_M,start_mu, start_p0, start_e0, start_D, 
+start_qS, start_phiS, start_qK, start_phiK,start_Phi_Phi0, start_Phi_r0))
 
 if ntemps > 1:
     # If we decide to use parallel tempering, we fall into this if statement. We assign each *group* of walkers
@@ -276,27 +310,24 @@ else:
 
 n = 25 # size of prior
 
-Delta_theta_intrinsic = [100, 1e-3, 1e-4, 1e-4, 1e-4, 1e-4]  # M, mu, a, p0, e0 Y0
+Delta_theta_intrinsic = [100, 1e-3, 1e-4, 1e-4]  # M, mu, p0, e0
 Delta_theta_D = dist/np.sqrt(np.sum(SNR))
 priors_in = {
     # Intrinsic parameters
     0: uniform_dist(M - n*Delta_theta_intrinsic[0], M + n*Delta_theta_intrinsic[0]), # Primary Mass M
     1: uniform_dist(mu - n*Delta_theta_intrinsic[1], mu + n*Delta_theta_intrinsic[1]), # Secondary Mass mu
-    2: uniform_dist(a - n*Delta_theta_intrinsic[2], a + n*Delta_theta_intrinsic[2]), # Spin parameter a
-    3: uniform_dist(p0 - n*Delta_theta_intrinsic[3], p0 + n*Delta_theta_intrinsic[3]), # semi-latus rectum p0
-    4: uniform_dist(e0 - n*Delta_theta_intrinsic[4], e0 + n*Delta_theta_intrinsic[4]), # eccentricity e0
-    5: uniform_dist(Y0 - n*Delta_theta_intrinsic[5], Y0 + n*Delta_theta_intrinsic[5]), # Cosine of inclination (Y0 = cos(iota0))
-    6: uniform_dist(dist - n*Delta_theta_D, dist + n* Delta_theta_D), # distance D
+    2: uniform_dist(p0 - n*Delta_theta_intrinsic[2], p0 + n*Delta_theta_intrinsic[2]), # semi-latus rectum p0
+    3: uniform_dist(e0 - n*Delta_theta_intrinsic[3], e0 + n*Delta_theta_intrinsic[3]), # eccentricity e0
+    4: uniform_dist(dist - n*Delta_theta_D, dist + n* Delta_theta_D), # distance D
     # Extrinsic parameters -- Angular parameters
-    7: uniform_dist(0, np.pi), # Polar angle (sky position)
-    8: uniform_dist(0, 2*np.pi), # Azimuthal angle (sky position)
-    9: uniform_dist(0, np.pi),  # Polar angle (spin vec)
-    10: uniform_dist(0, 2*np.pi), # Azimuthal angle (spin vec)
+    5: uniform_dist(0, np.pi), # Polar angle (sky position)
+    6: uniform_dist(0, 2*np.pi), # Azimuthal angle (sky position)
+    7: uniform_dist(0, np.pi),  # Polar angle (spin vec)
+    8: uniform_dist(0, 2*np.pi), # Azimuthal angle (spin vec)
     # Initial phases
-    11: uniform_dist(0, 2*np.pi), # Phi_phi0
-    12: uniform_dist(0, 2*np.pi), # Phi_theta0
-    13: uniform_dist(0, 2*np.pi) # Phi_r00
-}  
+    9: uniform_dist(0, 2*np.pi), # Phi_phi0
+    10: uniform_dist(0, 2*np.pi) # Phi_r0
+}
 
 priors = ProbDistContainer(priors_in, use_cupy = False)   # Set up priors so they can be used with the sampler.
 
@@ -313,7 +344,7 @@ if ntemps > 1:
 else:
     print("Value of starting log-likelihood points", llike(start[0])) 
 
-fp = "../data_files/test_few.h5"
+fp = "../data_files/mcmc_schw.h5"
 
 backend = HDFBackend(fp)
 

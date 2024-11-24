@@ -12,26 +12,30 @@ except ImportError:
     use_gpu = False
 
 # Intrinsic parameters   
-M = 1e6;    # Primary mass (units of solar mass)
-mu = 10.0;  # Secondary mass (units of solar mass)
-a = 0.9;    # Primary spin parameter (a \in [0,1])
-p0 = 9.2;   # Initial semi-latus rectum (dimensionless)
-e0 = 0.2;   # Initial eccentricity (dimensionless)
-iota0 = 0.8;  # Initial inclination angle (with respect to the equatorial plane, (radians))
+M = 5.4e5;    # Primary mass (units of solar mass)
+mu = 50.0;  # Secondary mass (units of solar mass)
+a = 0.0;    # Primary spin parameter (a \in [0,1])
+p0 = 10.35;   # Initial semi-latus rectum (dimensionless)
+e0 = 0.3;   # Initial eccentricity (dimensionless)
+iota0 = 0.0;  # Initial inclination angle (with respect to the equatorial plane, (radians))
 Y0 = np.cos(iota0);  
 
-dist = 2.0;   # Distance (units of giga-parsecs)
+
+dist = 8.75/100
+
 
 # Angular variables
-qS = 1.5; 
-phiS = 0.7; 
-qK = 1.2
-phiK = 0.6;  
+sinqS = 0.471975512
+sinqK = 0.6471975512
+qS = np.arcsin(sinqS)
+qK = np.arcsin(sinqK)
+phiK = 2.5471975512
+phiS = 0.9071975512
 
 # Initial angular phases -- positional elements along the orbit. 
-Phi_phi0 = 2.0   # Azimuthal phase
-Phi_theta0 = 3.0;   # Polar phase
-Phi_r0 = 4.0;    # Radial phase
+Phi_phi0 = 0.0   # Azimuthal phase
+Phi_theta0 = 0.0;   # Polar phase
+Phi_r0 = 0.0;    # Radial phase
 
 # Waveform params
 delta_t = 10.0;  # Sampling interval [seconds]
