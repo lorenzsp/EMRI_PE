@@ -1,4 +1,4 @@
-conda activate sbi_emri 
+#!/usr/bin/bash
 
 # set CUDA device
 export CUDA_VISIBLE_DEVICES=0

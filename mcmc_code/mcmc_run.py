@@ -202,7 +202,7 @@ noisepsd_T = T1TDISens()
 PSD_AET = [noisepsd_A.get_Sn(freq_np),noisepsd_E.get_Sn(freq_np),noisepsd_T.get_Sn(freq_np)]
 
 # from PyCBC
-psd = analytical_psd_lisa_tdi_AE_confusion(N_t, freq_np[2]-freq_np[1], 1e-4, tdi=1.5) # check lower flow
+psd = analytical_psd_lisa_tdi_AE_confusion(N_t, freq_np[2]-freq_np[1], 1e-10, tdi=1.5) # check lower flow
 noise_samples = noise_from_psd(N_t, delta_t, psd)
 
 psd_f = xp.fft.fftfreq(N_t,delta_t).get() # extract PSD from psd
@@ -218,12 +218,13 @@ plt.figure()
 plt.loglog(freq_np, np.abs(np.fft.rfft(noise_samples)*delta_t)**2 / (N_t * delta_t / 4.), '--', label='pycbc generated noise')
 plt.loglog(psd_f, psd_data, label='pycbc TDI A with confusion')
 plt.loglog(freq_np, PSD_AET[0], '--', label='TDI A')
+plt.loglog(freq_np, np.abs(EMRI_AET_fft[0].get()*delta_t)**2, '-', label='TDI Signal')
 plt.legend()
 plt.savefig("PSD.png")
 # breakpoint()
 
 # define PSDs from PyCBC
-PSD_AET = [cp.asarray(item) for item in PSD_AET] # Convert to cupy array
+PSD_AET = [cp.asarray(psd_data) for item in PSD_AET] # Convert to cupy array
 
 # Compute optimal matched filtering SNR
 SNR2_AET = xp.asarray([inner_prod(EMRI_AET_fft[i],EMRI_AET_fft[i],N_t,delta_t,PSD_AET[i]) for i in range(N_channels)])
@@ -244,6 +245,7 @@ variance_noise_AET = [N_t * PSD_AET[k] / (4*delta_t) for k in range(N_channels)]
 
 # Compute noise in frequency domain
 noise_f_AET = xp.asarray([xp.random.normal(0,np.sqrt(variance_noise_AET[k])) + 1j * xp.random.normal(0,np.sqrt(variance_noise_AET[k])) for k in range(N_channels)])
+noise_f_AET = xp.asarray([xp.fft.rfft(xp.asarray(noise_samples)) for k in range(N_channels)])
 
 # Dealing with positive transform, so first and last values are real. 
 # todo: fix
@@ -260,6 +262,7 @@ for i in range(N_channels):
     print("matched SNR in channel {0} is {1}".format(TDI_channels[i],SNR2_AET[i]**(1/2)))
     print("noise SNR^2 / N_t in channel {0} is {1}".format(TDI_channels[i],noise_SNR2_AET[i]))
 
+# breakpoint()
 ##===========================MCMC Settings============================
 
 iterations = 4000 #10000  # The number of steps to run of each walker
